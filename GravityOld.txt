@@ -1,0 +1,419 @@
+#Made by: LUCAS FUZATO CIPRIANO
+#From: Niteroi, Rio de Janeiro, Brazil
+
+import pygame
+from pygame.locals import *
+import sys
+import math as mt
+import random as rd
+import numpy as np
+import time as t
+import collections as clc
+
+LEFT = 1
+RIGHT = 3
+
+WHITE = (255,255,255)
+BLACK = (0,0,0)
+BLUE = (0,0,255)
+
+
+MAXPATHLEN = 500
+SCREENW = 1600
+SCREENH = 800
+GAPW = 50
+GAPH = 10
+MARGINW = SCREENW - GAPW
+MARGINH = SCREENH - GAPH
+MARGINSQUARE = [(GAPW,GAPH),( MARGINW ,GAPH), ( MARGINW ,MARGINH),(GAPW, MARGINH)] 
+STANDARDSQUARE = (70,30)
+GRIDSQUARE = (50,50)
+FONTSIZE = 20
+STDTRIGHEIGHT = 7
+
+BASEFPS = 50
+SPEEDMODFIER = {1:1 ,2:1.5 ,3:2 ,4:3 ,5:5}
+
+G = 1
+MAXMASS = 1000000
+STANDARDTIME = .15
+
+#game buttons
+
+MASSES = [10,100,1000,10000,100000,1000000]
+BUTTONS = {}
+STARTY = GAPH + MARGINH//2
+STARTX = GAPW 
+for x in MASSES:
+    pos = (STARTX, STARTY)
+    BUTTONS[pos] = x
+    STARTY += STANDARDSQUARE[1] + GAPH
+BUTTONS[(GAPW,GAPH)] = "clear"
+BUTTONS[(STANDARDSQUARE[0] + 2*GAPW,GAPH)] = "pause"
+BUTTONS[(GAPW,MARGINH - STANDARDSQUARE[0])] = "path"
+BUTTONS[(2*STANDARDSQUARE[0] + 3*GAPW,GAPH)] = "swap"
+BUTTONS[(GAPW,STANDARDSQUARE[1] + 2*GAPH)] = "Speed-"
+BUTTONS[(STANDARDSQUARE[0] + 2*GAPW,STANDARDSQUARE[1] + 2*GAPH)] = "Speed+"
+BUTTONS[(2*STANDARDSQUARE[0] + 3*GAPW,STANDARDSQUARE[1] + 2*GAPH)] = "Tracking"
+
+#################################PHISYCSRELATED###################################################
+
+class Stellar_object:
+
+    
+    def __init__(self,mass,initial_pos,initial_speed = (0,0)):
+
+        if mass > MAXMASS:
+            mass = MAXMASS
+        self.mass = mass
+        self.radius = int(1.1*mt.log10(mass) + 2)
+        self.pos = np.array(initial_pos)
+        self.speed = np.array(initial_speed)
+        self.path = clc.deque([])
+    
+    def move(self, aceleration, time = STANDARDTIME):
+
+        path = self.path
+        path.append(self.pos)
+        if MAXPATHLEN != None:
+            if len(path) > MAXPATHLEN:
+                path.popleft()
+        self.path = path
+
+        S = self.pos
+        Vo = self.speed       
+        V = Vo
+        t = time
+        S = S + Vo*t + aceleration*(t**2)*.5
+        V = Vo + aceleration*t
+        self.pos = S
+        self.speed = V
+
+    def __add__ (self,other):
+
+        M1,M2 = self.mass,other.mass
+        p1,p2 = self.pos,other.pos
+        vx1 = self.speed[0]
+        vy1 = self.speed[1]
+        vx2 = other.speed[0]
+        vy2 = other.speed[1]
+        M = M1 + M2
+        # calculate speed
+        vx = (M1*vx1 + M2*vx2)/M
+        vy = (M1*vy1 + M2*vy2)/M
+        S = np.array([vx,vy])
+        p = (p1*M1 + p2*M2)/(M1+M2)
+        return Stellar_object(mass = M, initial_pos = p, initial_speed = S)
+
+    def draw (self, screen, Color ):
+
+        center = tuple(map(int,self.pos))
+        Radius = self.radius
+
+        pygame.draw.circle(screen,Color,center,Radius)
+
+    def draw_path(self, screen, Color):
+
+        path = self.path
+        if len(path) > 1:
+            pygame.draw.lines(screen,Color, False, path)
+
+def check_for_colisions(seq):
+
+    objcts = seq.copy()
+    i = 0
+
+    while i < len(objcts):
+        x = objcts[i]
+        others = objcts[i+1:]
+        for y in others:
+            if distance(x.pos,y.pos) <= x.radius + y.radius:
+                path = x.path
+                x = x + y
+                x.path = path
+                objcts[i] = x
+                objcts.remove(y)
+        i += 1
+    return objcts
+
+def distance(pos1, pos2):
+    
+    axis_distance = [ (pos1[i] - pos2[i])**2 for i in range(len(pos1))]
+    quad_sum = sum(axis_distance)
+    result = mt.sqrt(quad_sum)
+    return result
+    pass
+
+def Find_acelleration_at(pos, objects):
+
+    ax, ay = 0,0
+    for x in objects:
+        if pos[0] != x.pos[0] or pos[1] != x.pos[1]:
+            d = distance(pos,x.pos)
+            dx = pos[0] - x.pos[0]
+            dy = pos[1] - x.pos[1]
+            M = x.mass
+            a = G*M/d**2
+            ax -= a*dx/d
+            ay -= a*dy/d
+    result = np.array([ax,ay])
+    return result
+
+######################SCREENRELATED############################
+
+def Return_triangle_at(pos0,height, alpha = 60, beta = 60):
+
+    assert sum(angles) == 180
+
+    height = (pos0[0] + height[0], pos0[1] + height[1])
+    HEIGHTDIST = distance(pos0,height)
+
+    point1 = p0
+    point2 =None
+    point3 = None
+
+    result = [point1, point2, point3]
+    return result
+
+
+def  GetSquare(pos, square = STANDARDSQUARE):
+
+    x,y = pos
+    X,Y = GAPW,GAPH
+
+    while X <= x:
+        X += square[0]
+    if X != x:
+        X -= square[0]
+    while Y <= y:
+        Y += square[1] 
+    if Y != y:
+        Y -= square[1]
+
+    return (X,Y) 
+
+
+
+def Relative_position(pos, box = (GAPW,GAPH,MARGINW,MARGINH) ):
+
+    x,y = pos
+    x1,y1,x2,y2 = box #x1,y1,x2,y2 = GAPW,GAPH,MARGINW,MARGINH
+    assert x1 < x2 and y1 < y2
+
+    if x < x1:
+        result = "BACKWARD"
+    elif x > x2:
+        result = "FOWARD"
+    elif y < y1:
+        result = "OVER"
+    elif y > y2:
+        result = "UNDER"
+    else:
+        result = "INSIDE"
+
+    return result
+
+##############################MAINCODE###########################################################
+def main():
+    
+    BACKGROUND = WHITE
+    FOREGROUND = BLACK
+    LGRAY = (200,200,200)
+    DGRAY = (100,100,100)
+    JUMPX,JUMPY = GRIDSQUARE
+    
+    pygame.init()
+    FPSCLOCK = pygame.time.Clock()
+    DISPLAYSURF = pygame.display.set_mode((SCREENW, SCREENH))
+    pygame.display.set_caption('Gravity_simulation')
+
+    STELLAROBJTS = []
+    
+    mousepos = (0,0)
+    selectedmass = 1000
+    CurrentFPS = BASEFPS
+    Current_speed = 1
+
+    running = True
+    path = False
+    l_clicked = False
+    r_clicked = False
+    released = False
+    dragged = False
+    tracking = False
+
+    fontObj = pygame.font.Font('freesansbold.ttf', FONTSIZE)
+
+    while True:
+
+        #updating field stats
+
+        if STELLAROBJTS and running:
+
+            for x in STELLAROBJTS:
+                a = Find_acelleration_at(x.pos,STELLAROBJTS)
+                x.move(a )
+            STELLAROBJTS =  check_for_colisions(STELLAROBJTS)  
+
+
+        #Drawing board
+        DISPLAYSURF.fill(BACKGROUND)
+        pygame.draw.lines(DISPLAYSURF,FOREGROUND, True, MARGINSQUARE,  3)
+
+        # Drawing Grid
+        GRIDX,GRIDY = GAPW,GAPH
+        JUMPX,JUMPY = GRIDSQUARE
+        #vertical lines
+        while GRIDX < MARGINW:
+            GRIDX += JUMPX
+            pygame.draw.line(DISPLAYSURF,DGRAY,(GRIDX,GAPH),(GRIDX,MARGINH))
+        
+        #horizontal lines
+        while GRIDY < MARGINH:
+            GRIDY += JUMPY
+            pygame.draw.line(DISPLAYSURF,DGRAY,(GAPW,GRIDY),(MARGINW,GRIDY))
+
+        #Drawing buttons
+        for button in BUTTONS:
+            pygame.draw.rect(DISPLAYSURF,FOREGROUND,button + STANDARDSQUARE)
+            option = str(BUTTONS[button])
+            textSurfaceObj = fontObj.render(option, True, BACKGROUND, FOREGROUND)
+            textRectObj = textSurfaceObj.get_rect()
+            textRectObj.topleft = button
+            textRectObj.size = STANDARDSQUARE
+            DISPLAYSURF.blit(textSurfaceObj, textRectObj)
+
+        #writing the current selected mass
+        textSurfaceObj = fontObj.render("selected mass:" + " " + str(selectedmass) , True, FOREGROUND)
+        textRectObj = textSurfaceObj.get_rect()
+        textRectObj.bottomleft = (GAPW,MARGINH//2)
+        DISPLAYSURF.blit(textSurfaceObj, textRectObj)
+
+        #writing the current speed
+        textSurfaceObj = fontObj.render("Current speed:" + " " + str(SPEEDMODFIER[Current_speed]) , True, FOREGROUND)
+        textRectObj = textSurfaceObj.get_rect()
+        textRectObj.bottomleft = (GAPW,MARGINH//2 - 2*GAPH)
+        DISPLAYSURF.blit(textSurfaceObj, textRectObj)
+
+        
+        #DRAWING STELLAROBJCS
+        if STELLAROBJTS:
+            for x in STELLAROBJTS:
+                if Relative_position(x.pos) == 'INSIDE':    # If inside the margin, draw objecta at position
+                    x.draw(DISPLAYSURF,FOREGROUND)
+                    
+                if tracking:                                                       
+                    pygame.draw.line(DISPLAYSURF,BLUE,mousepos,x.pos)
+                        
+                if path:
+                    x.draw_path(DISPLAYSURF,FOREGROUND)
+   
+        for event in pygame.event.get():
+
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            
+            elif event.type == MOUSEBUTTONDOWN:
+                if event.button == LEFT:
+                    l_clicked = True
+                    timeclick = t.time()
+                elif event.button == RIGHT:
+                    r_clicked = True
+                clickpos = event.pos
+             
+            elif event.type == MOUSEBUTTONUP:
+                if l_clicked:
+                    released = True
+                    timerelease = t.time()
+                elif r_clicked:
+                    r_clicked = False
+            
+            elif event.type == MOUSEMOTION and r_clicked:
+                dragged = True
+                path = False 
+        
+        mousepos = pygame.mouse.get_pos()
+        
+        if l_clicked:
+            if released:
+
+                if timerelease - timeclick < .5:
+                    
+                    k = 0
+                    for x in BUTTONS:
+                        BOX = x +  ( x[0] + STANDARDSQUARE[0], x[1] + STANDARDSQUARE[1])
+                        if Relative_position(mousepos,BOX) == 'INSIDE':
+                            break
+                        k += 1
+                    if k < len(BUTTONS):
+                        SELLBUTTON = BUTTONS[(BOX[0],BOX[1])]
+                        
+                        #pausing
+                        if SELLBUTTON == "pause":
+                            running = not running
+
+                        #changing speed
+                        elif SELLBUTTON == "Speed+" or SELLBUTTON == "Speed-":
+                            if SELLBUTTON == "Speed+" and Current_speed < 5:
+                                Current_speed += 1
+                                CurrentFPS = BASEFPS*SPEEDMODFIER[Current_speed]
+                            elif SELLBUTTON == "Speed-" and Current_speed > 1:
+                                Current_speed -= 1
+                                CurrentFPS = BASEFPS*SPEEDMODFIER[Current_speed]
+                                
+                            
+                        #clearing
+                        elif SELLBUTTON == "clear":
+                            STELLAROBJTS = []
+                            running = False
+                            path = False
+                            tracking = False
+                            selectedmass = 1000
+
+                        elif SELLBUTTON == "path":
+                            path = not path
+
+                        elif SELLBUTTON == "swap":
+                            FOREGROUND,BACKGROUND = BACKGROUND,FOREGROUND
+                            DGRAY,LGRAY = LGRAY,DGRAY
+                        
+                        elif SELLBUTTON == "Tracking":
+                            tracking = not tracking
+                        #changing the selected mass
+                        else:
+                            selectedmass = SELLBUTTON
+
+                    else:
+                        New_object = Stellar_object(selectedmass,mousepos)
+                        STELLAROBJTS.append(New_object)
+
+                else:
+                    Speed = (.3*(mousepos[0] - clickpos[0]),.3*(mousepos[1] - clickpos[1]))
+                    New_object = Stellar_object(selectedmass,clickpos, initial_speed = Speed)
+                    STELLAROBJTS.append(New_object)
+                
+                l_clicked = False
+                released = False
+
+            else: 
+                pygame.draw.line(DISPLAYSURF,FOREGROUND,clickpos,mousepos)
+
+        elif r_clicked and dragged:
+            
+            drag_len = (mousepos[0] - clickpos[0], mousepos[1] - clickpos[1])
+            a = drag_len[0]//30
+            b = drag_len[1]//30
+            drag_len = np.array((a,b))
+
+            for x in STELLAROBJTS:
+                x.pos = x.pos + drag_len
+                x.path = clc.deque([])
+            dragged = False
+
+                    
+        FPSCLOCK.tick(CurrentFPS)
+        pygame.display.update()
+
+if __name__ == "__main__":
+    main()
