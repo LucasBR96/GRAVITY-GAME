@@ -21,8 +21,6 @@ V_XS   = numpy.zeros( MAXITEMS )
 V_YS   = numpy.zeros( MAXITEMS )
 MASSES = numpy.zeros( MAXITEMS )
 
-# COLISION VARS ---------------------------------------------------------
-
 ######################## OVERALL FUNCTIONS ###############################
 
 def _move(  ):
@@ -63,6 +61,39 @@ def get_elems( ):
     ys = YS[ s ]
     rs = MIN_R + FOO( MASSES[ s ] )
     return xs , ys , rs
+
+###################### COLISION FUNCTIONS ################################
+
+def test_colision():
+
+    idx = list( range( TOTAL ) )
+    idx.sort( key = lambda x: XS[ x ] )
+
+    radius = numpy.array( [ MIN_R + FOO( MASSES[ i ] ) for i in range( TOTAL ) ] ) 
+
+    visited = set()
+    for i in range( TOTAL - 1 ):
+        pos = idx[ i ]
+        r = radius[ pos ]
+        for j in range( i + 1, TOTAL ):
+            pos_prime = idx[ j ]
+            r_prime = radius[ pos ]
+
+            if XS[ pos_prime ] - r_prime > XS[ pos ] + r:
+                break
+            
+            dx = XS[ pos_prime ] - XS[ pos ]
+            dy = YS[ pos_prime ] - YS[ pos ]
+            if ( dx**2 ) + ( dy**2 ) < ( r + r_prime )**2:
+                # visited.add( ( i , j ) )
+                visited.add( pos )
+                visited.add( pos_prime )
+                break
+    return visited
+
+def handle_collision():
+    pass
+
 
 
 ######################## MOTION FUNCTIONS ################################
