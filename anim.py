@@ -96,7 +96,7 @@ def test3( ):
         pos = ( r*a , r*b )
 
         a , b = -b , a  
-        s = r/r_min
+        s = .1*r/r_min
         vel = ( s*a , s*b )
 
         solar_sys.add_elem( pos , 1 , vel )

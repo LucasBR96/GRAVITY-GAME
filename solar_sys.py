@@ -36,6 +36,19 @@ def _move(  ):
     V_XS[ s ] += acx*DT
     V_YS[ s ] += acy*DT
 
+def remove_elem( pos ):
+
+    global TOTAL
+    TOTAL -=1 
+    if not TOTAL: return
+
+    XS[ pos ] , XS[ TOTAL ] = XS[ TOTAL ] , XS[ pos ]
+    YS[ pos ] , YS[ TOTAL ] = YS[ TOTAL ] , YS[ pos ]
+
+    V_XS[ pos ] , V_XS[ TOTAL ] = V_XS[ TOTAL ] , V_XS[ pos ]
+    V_YS[ pos ] , V_YS[ TOTAL ] = V_YS[ TOTAL ] , V_YS[ pos ]
+    
+    MASSES[ pos ] , MASSES[ TOTAL ] =  MASSES[ TOTAL ] , MASSES[ pos ]
 
 def add_elem( pos , mass , vel ):
 
@@ -64,38 +77,51 @@ def get_elems( ):
 
 ###################### COLISION FUNCTIONS ################################
 
-def test_colision():
+def get_colisions():
 
     idx = list( range( TOTAL ) )
-    idx.sort( key = lambda x: XS[ x ] )
-
-    radius = numpy.array( [ MIN_R + FOO( MASSES[ i ] ) for i in range( TOTAL ) ] ) 
-
     visited = set()
-    for i in range( TOTAL - 1 ):
-        pos = idx[ i ]
-        r = radius[ pos ]
-        for j in range( i + 1, TOTAL ):
-            pos_prime = idx[ j ]
-            r_prime = radius[ pos ]
+    radius = numpy.array( [ MIN_R + FOO( MASSES[ i ] ) for i in range( TOTAL ) ] ) 
+    idx.sort( key = lambda x: XS[ x ] - radius[ x ] )
 
-            if XS[ pos_prime ] - r_prime > XS[ pos ] + r:
-                break
-            
-            dx = XS[ pos_prime ] - XS[ pos ]
-            dy = YS[ pos_prime ] - YS[ pos ]
-            if ( dx**2 ) + ( dy**2 ) < ( r + r_prime )**2:
-                # visited.add( ( i , j ) )
-                visited.add( pos )
-                visited.add( pos_prime )
-                break
-    return visited
+    mid = 0
+    while mid < TOTAL - 1:
 
-def handle_collision():
+        i = idx[ mid ]
+        j = idx[ mid + 1 ]
+
+        sqr_dist = ( XS[ i ] - XS[ j ] )**2 + ( YS[ i ] - YS[ j ] )**2
+        rad_sum  = ( radius[ i ] + radius[ j ] )**2
+        if sqr_dist < rad_sum:
+            visited.add( i )
+            visited.add( j )
+        
+        mid += 1
+
+    return visited        
+        
+def handle_collision( col_set ):
     pass
 
+def merge( i , j ):
+    
+    k1 , k2 = i , j
+    # k1 = i if ( MASSES[ i ] > MASSES[ j ] ) else j
+    # k2 = j if ( k1 == i ) else i
+    mass_sum = MASSES[ k1 ] + MASSES[ k2 ]
 
+    new_x =  ( XS[ k2 ]*MASSES[ k2 ] + XS[ k1 ]*MASSES[ k1 ] )/mass_sum
+    new_y =  ( YS[ k2 ]*MASSES[ k2 ] + YS[ k1 ]*MASSES[ k1 ] )/mass_sum
+    new_vx = ( V_XS[ k2 ]*MASSES[ k2 ] + V_XS[ k1 ]*MASSES[ k1 ] )/mass_sum
+    new_vy = ( V_YS[ k2 ]*MASSES[ k2 ] + V_YS[ k1 ]*MASSES[ k1 ] )/mass_sum
 
+    MASSES[ k1 ] = MASSES[ k1 ] + MASSES[ k2 ]
+    XS[ k1 ]   = new_x 
+    YS[ k1 ]   = new_y 
+    V_XS[ k1 ] = new_vx 
+    V_YS[ k1 ] = new_vy
+
+    return k2 
 ######################## MOTION FUNCTIONS ################################
 
 def remove_main_diag( Mat ):
