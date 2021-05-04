@@ -7,10 +7,12 @@ from itertools import product
 #GRAVITATIONAL PROPERTIES OF THE SYSTEM ---------------------------------
 G     = 1          # UNIVERSAL CONSTANT
 MIN_R = 1          # PIXELS
-FOO   = numpy.log10 # R = MIN_R + FOO( M )
+FOO   = numpy.log10
+R_FUN = lambda x: MIN_R + FOO( x )
 
 # MOTION properties ---------------------------------------
-DT    = .01
+DT = .01
+K  = .7 # ELASTIC CONSTANT
 
 # EVERY PLANET AND HER PROPERTIES ---------------------------------------
 TOTAL = 0
@@ -22,20 +24,7 @@ V_YS   = numpy.zeros( MAXITEMS )
 MASSES = numpy.zeros( MAXITEMS )
 RADIUS = numpy.zeros( MAXITEMS )
 
-######################## OVERALL FUNCTIONS ###############################
-
-def _move(  ):
-
-    s = slice( TOTAL )
-    vx = V_XS[ s ]*DT 
-    XS[ s ] += vx
-
-    vy = V_YS[ s ]*DT
-    YS[ s ] += vy 
-
-    acx , acy = get_acceleration()
-    V_XS[ s ] += acx*DT
-    V_YS[ s ] += acy*DT
+######################## ELEMENT MANIPUALTION FUNCTIONS ###############################
 
 def remove_elem( pos ):
 
@@ -57,9 +46,9 @@ def swap( i , j ):
     V_YS[ i ] , V_YS[ j ] = V_YS[ j ] , V_YS[ i ]
     
     MASSES[ i ] , MASSES[ j ] =  MASSES[ i ] , MASSES[ j ]
-    RADIUS[ i ] , RADIUS[ j ] =  MASSES[ j ] , MASSES[ i ]
+    RADIUS[ i ] , RADIUS[ j ] =  RADIUS[ j ] , RADIUS[ i ]
 
-def add_elem( pos , mass , vel ):
+def _add_elem( pos , mass , vel ):
 
     global TOTAL
     if TOTAL >= MAXITEMS: return
@@ -68,22 +57,29 @@ def add_elem( pos , mass , vel ):
     XS[ TOTAL ] = x
     YS[ TOTAL ] = y
 
-
     ( vx , vy )   = vel
     V_XS[ TOTAL ] = vx
     V_YS[ TOTAL ] = vy
 
     MASSES[ TOTAL ] = mass
-    RADIUS[ TOTAL ] = MIN_R + FOO( mass )
+    RADIUS[ TOTAL ] = R_FUN( mass )
     TOTAL += 1
 
-def get_elems( ):
+def _get_elems( ):
 
     s = slice( TOTAL )
     xs = XS[ s ]
     ys = YS[ s ]
     rs = RADIUS[ s ]
     return xs , ys , rs
+
+def partition( positions ):
+
+    # positions.sort( )
+    n = len( positions )
+    for i , pos in enumerate( positions ):
+        swap( pos , TOTAL - n + i )
+    return TOTAL
 
 ###################### COLISION FUNCTIONS ################################
 
@@ -94,8 +90,9 @@ def colide( i , j ):
 
 def get_colisions():
 
+    foo = lambda x: XS[ x ] - RADIUS[ x ]
     idx = list( range( TOTAL ) )
-    idx.sort( key = lambda x: XS[ x ] - RADIUS[ x ] )
+    idx.sort( key = foo )
 
     visited = set()
     mid = 0
@@ -105,54 +102,40 @@ def get_colisions():
         j = idx[ mid + 1 ]
 
         if colide( i , j ):
-            visited.add( i )
-            visited.add( j )
+            visited.add( ( i , j ) )
         
         mid += 1
 
     return visited        
         
-def handle_collision( col_set ):
-
-    idx = list( col_set )
-    idx.sort( key = lambda x: XS[ x ] - RADIUS[ x ] )
-   
-    to_remove = set()
-    root , stem = -1 , -1
-    for x in idx:
-
-        if root == -1:
-            root = x
-            continue
-        stem = x
-
-        if colide( root , stem ):
-            merge( root , stem )
-            to_remove.add( stem )  
-        else:
-            root = stem
-
-    for i in to_remove:
-        remove_elem( i )    
+def elastict_colision( i , j ):
+    pass
 
 def merge( i , j ):
 
-    k1 , k2 = i , j
-    mass_sum = MASSES[ k1 ] + MASSES[ k2 ]
+    mass_sum = MASSES[ i ] + MASSES[ j ]
+    new_x =  ( XS[   i ]*MASSES[ i ] + XS[   j ]*MASSES[ j ] )/mass_sum
+    new_y =  ( YS[   i ]*MASSES[ i ] + YS[   j ]*MASSES[ j ] )/mass_sum
+    new_vx = ( V_XS[ i ]*MASSES[ i ] + V_XS[ j ]*MASSES[ j ] )/mass_sum
+    new_vy = ( V_YS[ i ]*MASSES[ i ] + V_YS[ j ]*MASSES[ j ] )/mass_sum
 
-    new_x =  ( XS[ k2 ]*MASSES[ k2 ] + XS[ k1 ]*MASSES[ k1 ] )/mass_sum
-    new_y =  ( YS[ k2 ]*MASSES[ k2 ] + YS[ k1 ]*MASSES[ k1 ] )/mass_sum
-    new_vx = ( V_XS[ k2 ]*MASSES[ k2 ] + V_XS[ k1 ]*MASSES[ k1 ] )/mass_sum
-    new_vy = ( V_YS[ k2 ]*MASSES[ k2 ] + V_YS[ k1 ]*MASSES[ k1 ] )/mass_sum
+    return ( new_x , new_y ) , mass_sum , ( new_vx , new_vy )
 
-    MASSES[ k1 ] = mass_sum
-    RADIUS[ k1 ] = MIN_R + FOO( mass_sum )
-    XS[ k1 ]   = new_x 
-    YS[ k1 ]   = new_y 
-    V_XS[ k1 ] = new_vx 
-    V_YS[ k1 ] = new_vy
+def _handle_collision( ):
+   
+    visited = get_colisions()
+    if not visited: return
 
-    return k2 
+    for i , j in visited:
+        elastict_colision( i , j )
+
+def _set_elas( val ):
+
+    val = max( val , 0 )
+    val = min( val , 1 )
+
+    global K
+    K = val
 ######################## MOTION FUNCTIONS ################################
 
 def remove_main_diag( Mat ):
@@ -207,13 +190,26 @@ def get_acceleration( ):
 
     return acm_x , acm_y
 
+def _move(  ):
+
+    s = slice( TOTAL )
+    vx = V_XS[ s ]*DT 
+    XS[ s ] += vx
+
+    vy = V_YS[ s ]*DT
+    YS[ s ] += vy 
+
+    acx , acy = get_acceleration()
+    V_XS[ s ] += acx*DT
+    V_YS[ s ] += acy*DT
+
 ######################## TESTS FUNCTIONS ################################
 
 def test1( ):
 
-    add_elem( ( 0 , 0 ) , 5 , ( 0 , 0 ) )
-    add_elem( ( 0 , 1 ) , 5 , ( 0 , 0 ) )
-    add_elem( ( 1 , 0 ) , 5 , ( 0 , 0 ) )
+    _add_elem( ( 0 , 0 ) , 5 , ( 0 , 0 ) )
+    _add_elem( ( 0 , 1 ) , 5 , ( 0 , 0 ) )
+    _add_elem( ( 1 , 0 ) , 5 , ( 0 , 0 ) )
 
     acm_x , acm_y = get_acceleration( )
     for acx , acy in zip( acm_x , acm_y ):
@@ -221,8 +217,8 @@ def test1( ):
 
 def test2( ):
 
-    add_elem( ( 0 , 0 ) , 25 , ( 0 , 0 ) )
-    add_elem( ( 1 , 0 ) , 1 , ( 10 , 0 ) )
+    _add_elem( ( 0 , 0 ) , 25 , ( 0 , 0 ) )
+    _add_elem( ( 1 , 0 ) , 1 , ( 10 , 0 ) )
     # add_elem( ( 1 , 0 ) , 1 , ( 0 , 0 ) )
 
     for i in range( 10**4 ):
