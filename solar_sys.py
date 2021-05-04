@@ -20,6 +20,7 @@ YS     = numpy.zeros( MAXITEMS )
 V_XS   = numpy.zeros( MAXITEMS )
 V_YS   = numpy.zeros( MAXITEMS )
 MASSES = numpy.zeros( MAXITEMS )
+RADIUS = numpy.zeros( MAXITEMS )
 
 ######################## OVERALL FUNCTIONS ###############################
 
@@ -39,16 +40,24 @@ def _move(  ):
 def remove_elem( pos ):
 
     global TOTAL
-    TOTAL -=1 
-    if not TOTAL: return
 
-    XS[ pos ] , XS[ TOTAL ] = XS[ TOTAL ] , XS[ pos ]
-    YS[ pos ] , YS[ TOTAL ] = YS[ TOTAL ] , YS[ pos ]
+    if pos > TOTAL: return
+    TOTAL = max( TOTAL -1 , 0 )
 
-    V_XS[ pos ] , V_XS[ TOTAL ] = V_XS[ TOTAL ] , V_XS[ pos ]
-    V_YS[ pos ] , V_YS[ TOTAL ] = V_YS[ TOTAL ] , V_YS[ pos ]
+    if pos == TOTAL: return
+
+    swap( pos , TOTAL )
+
+def swap( i , j ):
+
+    XS[ i ] , XS[ j ] = XS[ j ] , XS[ i ]
+    YS[ i ] , YS[ j ] = YS[ j ] , YS[ i ]
+
+    V_XS[ i ] , V_XS[ j ] = V_XS[ j ] , V_XS[ i ]
+    V_YS[ i ] , V_YS[ j ] = V_YS[ j ] , V_YS[ i ]
     
-    MASSES[ pos ] , MASSES[ TOTAL ] =  MASSES[ TOTAL ] , MASSES[ pos ]
+    MASSES[ i ] , MASSES[ j ] =  MASSES[ i ] , MASSES[ j ]
+    RADIUS[ i ] , RADIUS[ j ] =  MASSES[ j ] , MASSES[ i ]
 
 def add_elem( pos , mass , vel ):
 
@@ -59,12 +68,13 @@ def add_elem( pos , mass , vel ):
     XS[ TOTAL ] = x
     YS[ TOTAL ] = y
 
-    MASSES[ TOTAL ] = mass
 
     ( vx , vy )   = vel
     V_XS[ TOTAL ] = vx
     V_YS[ TOTAL ] = vy
 
+    MASSES[ TOTAL ] = mass
+    RADIUS[ TOTAL ] = MIN_R + FOO( mass )
     TOTAL += 1
 
 def get_elems( ):
@@ -72,27 +82,29 @@ def get_elems( ):
     s = slice( TOTAL )
     xs = XS[ s ]
     ys = YS[ s ]
-    rs = MIN_R + FOO( MASSES[ s ] )
+    rs = RADIUS[ s ]
     return xs , ys , rs
 
 ###################### COLISION FUNCTIONS ################################
 
+def colide( i , j ):
+    sqr_dist = ( XS[ i ] - XS[ j ] )**2 + ( YS[ i ] - YS[ j ] )**2
+    rad_sum  = ( RADIUS[ i ] + RADIUS[ j ] )**2
+    return sqr_dist < rad_sum
+
 def get_colisions():
 
     idx = list( range( TOTAL ) )
-    visited = set()
-    radius = numpy.array( [ MIN_R + FOO( MASSES[ i ] ) for i in range( TOTAL ) ] ) 
-    idx.sort( key = lambda x: XS[ x ] - radius[ x ] )
+    idx.sort( key = lambda x: XS[ x ] - RADIUS[ x ] )
 
+    visited = set()
     mid = 0
     while mid < TOTAL - 1:
 
         i = idx[ mid ]
         j = idx[ mid + 1 ]
 
-        sqr_dist = ( XS[ i ] - XS[ j ] )**2 + ( YS[ i ] - YS[ j ] )**2
-        rad_sum  = ( radius[ i ] + radius[ j ] )**2
-        if sqr_dist < rad_sum:
+        if colide( i , j ):
             visited.add( i )
             visited.add( j )
         
@@ -101,13 +113,31 @@ def get_colisions():
     return visited        
         
 def handle_collision( col_set ):
-    pass
+
+    idx = list( col_set )
+    idx.sort( key = lambda x: XS[ x ] - RADIUS[ x ] )
+   
+    to_remove = set()
+    root , stem = -1 , -1
+    for x in idx:
+
+        if root == -1:
+            root = x
+            continue
+        stem = x
+
+        if colide( root , stem ):
+            merge( root , stem )
+            to_remove.add( stem )  
+        else:
+            root = stem
+
+    for i in to_remove:
+        remove_elem( i )    
 
 def merge( i , j ):
-    
+
     k1 , k2 = i , j
-    # k1 = i if ( MASSES[ i ] > MASSES[ j ] ) else j
-    # k2 = j if ( k1 == i ) else i
     mass_sum = MASSES[ k1 ] + MASSES[ k2 ]
 
     new_x =  ( XS[ k2 ]*MASSES[ k2 ] + XS[ k1 ]*MASSES[ k1 ] )/mass_sum
@@ -115,7 +145,8 @@ def merge( i , j ):
     new_vx = ( V_XS[ k2 ]*MASSES[ k2 ] + V_XS[ k1 ]*MASSES[ k1 ] )/mass_sum
     new_vy = ( V_YS[ k2 ]*MASSES[ k2 ] + V_YS[ k1 ]*MASSES[ k1 ] )/mass_sum
 
-    MASSES[ k1 ] = MASSES[ k1 ] + MASSES[ k2 ]
+    MASSES[ k1 ] = mass_sum
+    RADIUS[ k1 ] = MIN_R + FOO( mass_sum )
     XS[ k1 ]   = new_x 
     YS[ k1 ]   = new_y 
     V_XS[ k1 ] = new_vx 
