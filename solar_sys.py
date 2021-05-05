@@ -1,11 +1,11 @@
 import numpy
 import time
-from itertools import product
-
+from itertools import product ,combinations
+from sys import maxsize
 ######################## GLOBAL VARS ####################################
 
 #GRAVITATIONAL PROPERTIES OF THE SYSTEM ---------------------------------
-G     = 1          # UNIVERSAL CONSTANT
+G     = 20          # UNIVERSAL CONSTANT
 MIN_R = 1          # PIXELS
 FOO   = numpy.log10
 R_FUN = lambda x: MIN_R + FOO( x )
@@ -79,37 +79,76 @@ def partition( positions ):
     n = len( positions )
     for i , pos in enumerate( positions ):
         swap( pos , TOTAL - n + i )
-    return TOTAL
+    return TOTAL - n
 
 ###################### COLISION FUNCTIONS ################################
 
-def colide( i , j ):
+def collide( i , j ):
     sqr_dist = ( XS[ i ] - XS[ j ] )**2 + ( YS[ i ] - YS[ j ] )**2
     rad_sum  = ( RADIUS[ i ] + RADIUS[ j ] )**2
-    return sqr_dist < rad_sum
+    return sqr_dist <= rad_sum
 
-def get_colisions():
+def get_collisions():
 
     foo = lambda x: XS[ x ] - RADIUS[ x ]
     idx = list( range( TOTAL ) )
     idx.sort( key = foo )
 
-    visited = set()
-    mid = 0
-    while mid < TOTAL - 1:
+    collision_groups = []
+    i , lim = 0 , -maxsize
+    while i < TOTAL:
 
-        i = idx[ mid ]
-        j = idx[ mid + 1 ]
-
-        if colide( i , j ):
-            visited.add( ( i , j ) )
+        pos = idx[ i ]
+        current_group = [ pos ]
+        if XS[ pos ] - RADIUS[ pos ] < lim:
+            current_group = collision_groups.pop() + current_group
+        collision_groups.append( current_group )
         
-        mid += 1
+        lim = XS[ pos ] + RADIUS[ pos ]
+        i += 1
+    
+    visited = set()
+    for group in collision_groups:
+        if len( group ) == 1: continue 
+        for i , j in combinations( group , 2 ):
+            if collide( i , j ): 
+                visited.add( ( i , j ) )
 
     return visited        
         
-def elastict_colision( i , j ):
-    pass
+def elastict_collision( i , j ):
+    
+    if not K: return
+
+    # FINDING THE CONTACT POINT -------------------------------------------------------------
+
+    p = i if MASSES[ i ] > MASSES[ j ] else j
+    q = j if p == i else i
+
+    xp , yp , rp = XS[ p ] , YS[ p ] , RADIUS[ p ]
+    xq , yq , rq = XS[ q ] , YS[ q ] , RADIUS[ q ]
+
+    d_square = ( xp - xq )**2 + ( yp - yq )**2
+    r_sum    = rp + rq
+    r_diff   = rp - rq
+    a = ( r_sum*r_diff + d_square )/( 2*d_square )
+
+    xu = a*( xq - xp ) + xp
+    yu = a*( yq - yp ) + yp
+
+    # REPOSITIONING THE BALLS ----------------------------------------------------------------
+    dx = xq - xp
+    dy = yq - yp
+    d = numpy.sqrt( d_square )
+
+    XS[ q ] = xu + rq*( dx/d )
+    YS[ q ] = yu + rq*( dy/d )
+
+    XS[ p ] = xu - rp*( dx/d )
+    YS[ p ] = yu - rp*( dy/d )
+    
+    # RECALCULATING SPEEDS ---------------------------------------------------------------------
+
 
 def merge( i , j ):
 
@@ -123,11 +162,31 @@ def merge( i , j ):
 
 def _handle_collision( ):
    
-    visited = get_colisions()
+    visited = get_collisions()
     if not visited: return
 
     for i , j in visited:
-        elastict_colision( i , j )
+        elastict_collision( i , j )
+    
+    if K: return
+
+    to_remove = set( )
+    tups = []
+    for i , j in visited:
+        if i in to_remove or j in to_remove:
+            continue
+
+        tups.append( merge( i , j ) )
+        to_remove.add( i )
+        to_remove.add( j )
+        
+    
+    global TOTAL
+    TOTAL = partition( to_remove )
+    
+    for tup in tups:
+        _add_elem( *tup ) 
+
 
 def _set_elas( val ):
 
