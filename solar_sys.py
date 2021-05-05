@@ -12,7 +12,6 @@ R_FUN = lambda x: MIN_R + FOO( x )
 
 # MOTION properties ---------------------------------------
 DT = .01
-K  = .7 # ELASTIC CONSTANT
 
 # EVERY PLANET AND HER PROPERTIES ---------------------------------------
 TOTAL = 0
@@ -26,7 +25,7 @@ RADIUS = numpy.zeros( MAXITEMS )
 
 ######################## ELEMENT MANIPUALTION FUNCTIONS ###############################
 
-def remove_elem( pos ):
+def _remove_elem( pos ):
 
     global TOTAL
 
@@ -35,9 +34,9 @@ def remove_elem( pos ):
 
     if pos == TOTAL: return
 
-    swap( pos , TOTAL )
+    _swap( pos , TOTAL )
 
-def swap( i , j ):
+def _swap( i , j ):
 
     XS[ i ] , XS[ j ] = XS[ j ] , XS[ i ]
     YS[ i ] , YS[ j ] = YS[ j ] , YS[ i ]
@@ -48,47 +47,15 @@ def swap( i , j ):
     MASSES[ i ] , MASSES[ j ] =  MASSES[ i ] , MASSES[ j ]
     RADIUS[ i ] , RADIUS[ j ] =  RADIUS[ j ] , RADIUS[ i ]
 
-def _add_elem( pos , mass , vel ):
-
-    global TOTAL
-    if TOTAL >= MAXITEMS: return
-
-    ( x , y )   = pos
-    XS[ TOTAL ] = x
-    YS[ TOTAL ] = y
-
-    ( vx , vy )   = vel
-    V_XS[ TOTAL ] = vx
-    V_YS[ TOTAL ] = vy
-
-    MASSES[ TOTAL ] = mass
-    RADIUS[ TOTAL ] = R_FUN( mass )
-    TOTAL += 1
-
-def _get_elems( ):
-
-    s = slice( TOTAL )
-    xs = XS[ s ]
-    ys = YS[ s ]
-    rs = RADIUS[ s ]
-    return xs , ys , rs
-
-def partition( positions ):
-
-    # positions.sort( )
-    n = len( positions )
-    for i , pos in enumerate( positions ):
-        swap( pos , TOTAL - n + i )
-    return TOTAL - n
 
 ###################### COLISION FUNCTIONS ################################
 
-def collide( i , j ):
+def _collide( i , j ):
     sqr_dist = ( XS[ i ] - XS[ j ] )**2 + ( YS[ i ] - YS[ j ] )**2
     rad_sum  = ( RADIUS[ i ] + RADIUS[ j ] )**2
     return sqr_dist <= rad_sum
 
-def get_collisions():
+def _get_collisions():
 
     foo = lambda x: XS[ x ] - RADIUS[ x ]
     idx = list( range( TOTAL ) )
@@ -111,44 +78,10 @@ def get_collisions():
     for group in collision_groups:
         if len( group ) == 1: continue 
         for i , j in combinations( group , 2 ):
-            if collide( i , j ): 
+            if _collide( i , j ): 
                 visited.add( ( i , j ) )
 
     return visited        
-        
-def elastict_collision( i , j ):
-    
-    if not K: return
-
-    # FINDING THE CONTACT POINT -------------------------------------------------------------
-
-    p = i if MASSES[ i ] > MASSES[ j ] else j
-    q = j if p == i else i
-
-    xp , yp , rp = XS[ p ] , YS[ p ] , RADIUS[ p ]
-    xq , yq , rq = XS[ q ] , YS[ q ] , RADIUS[ q ]
-
-    d_square = ( xp - xq )**2 + ( yp - yq )**2
-    r_sum    = rp + rq
-    r_diff   = rp - rq
-    a = ( r_sum*r_diff + d_square )/( 2*d_square )
-
-    xu = a*( xq - xp ) + xp
-    yu = a*( yq - yp ) + yp
-
-    # REPOSITIONING THE BALLS ----------------------------------------------------------------
-    dx = xq - xp
-    dy = yq - yp
-    d = numpy.sqrt( d_square )
-
-    XS[ q ] = xu + rq*( dx/d )
-    YS[ q ] = yu + rq*( dy/d )
-
-    XS[ p ] = xu - rp*( dx/d )
-    YS[ p ] = yu - rp*( dy/d )
-    
-    # RECALCULATING SPEEDS ---------------------------------------------------------------------
-
 
 def merge( i , j ):
 
@@ -162,42 +95,24 @@ def merge( i , j ):
 
 def _handle_collision( ):
    
-    visited = get_collisions()
-    if not visited: return
-
-    for i , j in visited:
-        elastict_collision( i , j )
+    visited = _get_collisions()
+    handled = set()
     
-    if K: return
-
-    to_remove = set( )
-    tups = []
     for i , j in visited:
-        if i in to_remove or j in to_remove:
+        if i in handled or j in handled:
             continue
+        handled.add( i )
+        handled.add( j )
 
-        tups.append( merge( i , j ) )
-        to_remove.add( i )
-        to_remove.add( j )
-        
+        tup = merge( i , j )
+        add_elem( *tup )
     
-    global TOTAL
-    TOTAL = partition( to_remove )
-    
-    for tup in tups:
-        _add_elem( *tup ) 
+    for i in handled:
+        _remove_elem( i )
 
-
-def _set_elas( val ):
-
-    val = max( val , 0 )
-    val = min( val , 1 )
-
-    global K
-    K = val
 ######################## MOTION FUNCTIONS ################################
 
-def remove_main_diag( Mat ):
+def _remove_main_diag( Mat ):
 
     m , n = Mat.shape
     if m != n: 
@@ -212,34 +127,34 @@ def remove_main_diag( Mat ):
     
     return Mat_prime.reshape( ( m , m - 1 ) )
 
-def get_distances( ):
+def _get_distances( ):
 
     s = slice( TOTAL )
 
     xs = XS[ s ].reshape( ( 1 , TOTAL ) )
     dx = xs.T - xs
-    dx = remove_main_diag( dx )
+    dx = _remove_main_diag( dx )
 
     ys = YS[ s ].reshape( ( 1 , TOTAL ) )
     dy = ys.T - ys
-    dy = remove_main_diag( dy )
+    dy = _remove_main_diag( dy )
 
     d = numpy.sqrt( dx**2 + dy**2 )
 
     return -dx , -dy , d 
 
-def get_mass_product( ):
+def _get_mass_product( ):
 
     s = slice( TOTAL )
     masses = MASSES[ s ].reshape( ( 1 , TOTAL ) )
     prod   = numpy.ones( ( TOTAL , 1 ) )
-    masses = remove_main_diag( masses*prod )
+    masses = _remove_main_diag( masses*prod )
     return G*masses
 
-def get_acceleration( ):
+def _get_acceleration( ):
 
-    masses      = get_mass_product()
-    dx , dy , d = get_distances()
+    masses      = _get_mass_product()
+    dx , dy , d = _get_distances()
 
     ratio_x = dx/( d**3 )
     acm_x   = ( masses*ratio_x ).sum( axis = 1 , keepdims = False )
@@ -258,26 +173,132 @@ def _move(  ):
     vy = V_YS[ s ]*DT
     YS[ s ] += vy 
 
-    acx , acy = get_acceleration()
+    acx , acy = _get_acceleration()
     V_XS[ s ] += acx*DT
     V_YS[ s ] += acy*DT
+
+######################## FOCUS FUNCTIONS ################################
+
+CENTER          = ( 0 , 0 )
+FOCUS           = 0
+CENTER_ON_FOCUS = False
+
+def move_center( dx , dy ):
+
+    global CENTER , CENTER_ON_FOCUS
+
+    cx , cy = CENTER
+    cx += dx
+    cy += dy
+    CENTER = ( cx , cy )
+
+    CENTER_ON_FOCUS = False
+
+def focus_on_next( ):
+
+    global FOCUS , CENTER_ON_FOCUS
+
+    FOCUS = ( FOCUS + 1 )%TOTAL
+    CENTER_ON_FOCUS = True
+
+def focus_on_previous( ):
+
+    global FOCUS , CENTER_ON_FOCUS
+
+    FOCUS = ( FOCUS - 1 )%TOTAL
+    CENTER_ON_FOCUS = True
+
+def focus_on_massive( ):
+
+    global FOCUS , CENTER_ON_FOCUS
+
+    s = slice( TOTAL )
+    m = MASSES[ s ]
+    FOCUS = numpy.argmax( m )
+    CENTER_ON_FOCUS = True
+
+######################## SPEED FUNCTIONS ################################
+
+SPEED     = 1
+MIN_SPEED = 1
+MAX_SPEED = 10
+
+PAUSED = False
+
+def add_speed( ):
+
+    if PAUSED: return
+
+    global SPEED
+    SPEED = min( MAX_SPEED , SPEED + 1 )
+
+def remove_speed( ):
+
+    if PAUSED: return
+
+    global SPEED
+    SPEED = max( MIN_SPEED , SPEED - 1 )
+    
+def flip_pause( ):
+
+    global PAUSED
+    PAUSED = not PAUSED
+
+def update( ):
+
+    if PAUSED: return
+    for i in range( SPEED ):
+        _move()
+        _handle_collision( )
+
+##################### DATA EXCHANGE WITh OTHER FILES ####################
+
+def add_elem( pos , mass , vel ):
+
+    global TOTAL
+    if TOTAL >= MAXITEMS: return
+
+    ( x , y )   = pos
+    XS[ TOTAL ] = x
+    YS[ TOTAL ] = y
+
+    ( vx , vy )   = vel
+    V_XS[ TOTAL ] = vx
+    V_YS[ TOTAL ] = vy
+
+    MASSES[ TOTAL ] = mass
+    RADIUS[ TOTAL ] = R_FUN( mass )
+    TOTAL += 1
+
+def get_elems( ):
+
+    global CENTER
+    if CENTER_ON_FOCUS:
+        CENTER = ( XS[ FOCUS ] , YS[ FOCUS ] )
+
+    cx , cy = CENTER
+    s = slice( TOTAL )
+    xs = XS[ s ] - cx
+    ys = YS[ s ] - cy
+    rs = RADIUS[ s ]
+    return xs , ys , rs
 
 ######################## TESTS FUNCTIONS ################################
 
 def test1( ):
 
-    _add_elem( ( 0 , 0 ) , 5 , ( 0 , 0 ) )
-    _add_elem( ( 0 , 1 ) , 5 , ( 0 , 0 ) )
-    _add_elem( ( 1 , 0 ) , 5 , ( 0 , 0 ) )
+    add_elem( ( 0 , 0 ) , 5 , ( 0 , 0 ) )
+    add_elem( ( 0 , 1 ) , 5 , ( 0 , 0 ) )
+    add_elem( ( 1 , 0 ) , 5 , ( 0 , 0 ) )
 
-    acm_x , acm_y = get_acceleration( )
+    acm_x , acm_y = _get_acceleration( )
     for acx , acy in zip( acm_x , acm_y ):
         print( acx , acy )
 
 def test2( ):
 
-    _add_elem( ( 0 , 0 ) , 25 , ( 0 , 0 ) )
-    _add_elem( ( 1 , 0 ) , 1 , ( 10 , 0 ) )
+    add_elem( ( 0 , 0 ) , 25 , ( 0 , 0 ) )
+    add_elem( ( 1 , 0 ) , 1 , ( 10 , 0 ) )
     # add_elem( ( 1 , 0 ) , 1 , ( 0 , 0 ) )
 
     for i in range( 10**4 ):
